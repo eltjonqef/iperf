@@ -1,5 +1,9 @@
 #include <iostream>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <cstring>
 
 using namespace std;
 
@@ -45,7 +49,12 @@ int main(int argc, char **argv){
             default:
                 break;
         }
+        break;
     }
-    
+    int sock;
+    if((sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==-1){
+        perror("opening TCP listening socket");
+        exit(EXIT_FAILURE);
+    }
     return 0;
 }
