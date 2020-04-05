@@ -1,16 +1,26 @@
 /*
-                                                            TCP SEND PACKET
-                                        --------------------------------------------------------------------
-                                       | iperf | message type(init/close) | data length | data ..............|
-                                        --------------------------------------------------------------------
-                                BYTES:     5                4/5                   1            data len
+                                                        CLIENT TCP INIT PACKET
+                                        -------------------------------------------------
+                                       | iperf | init | data length | data ..............|
+                                        -------------------------------------------------
+                                BYTES:     5       4         1            data len
 
+                                                CLIENT TCP CLOSE SOCKET PACKET
+                                                     ---------------
+                                                    | iperf | close |
+                                                     ---------------
 
-                                                         TCP RECEIVE PACKET
-                                        ---------------------------------------------
-                                       | iperf | acc/dec | data length | data .......|
-                                        ---------------------------------------------
-                                BYTES:     5        3           1         data len
+                                                CLIENT TCP ACC PACKET
+                                        -----------------------------------------
+                                       | iperf | acc | data length | data .......|
+                                        -----------------------------------------
+                                BYTES:     5      3         1         data len
+
+                                                CLIENT TCP DEC PACKET
+                                                 ---------------
+                                                | iperf | close |
+                                                 ---------------
+
 */
 
 #include <iostream>
