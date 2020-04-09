@@ -7,9 +7,9 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <map>
-#define PORT 56000
+#define PORT 56587
 #define DATALIMIT 65507
-#define BANDWIDTH 1000000
+#define BANDWIDTH 10000000
 
 using namespace std;
 
@@ -32,7 +32,6 @@ int main(){
 
 
     struct sockaddr_in serverInfo;
-    struct sockaddr_in clientInfo;
 
     
     
@@ -43,13 +42,14 @@ int main(){
         exit(EXIT_FAILURE);
     }
     memset(&serverInfo, 0, sizeof(serverInfo));
-    memset(&clientInfo, 0, sizeof(clientInfo)); 
       
     serverInfo.sin_family = AF_INET; 
+    serverInfo.sin_addr.s_addr = INADDR_ANY;
     serverInfo.sin_port = htons(PORT); 
-    serverInfo.sin_addr.s_addr = INADDR_ANY; 
+    
 
     int counter=1;
+    struct timespec now;
     while(1){ //SEND DATA EVERY SECOND
         int next=DATALIMIT;
         int dataSent=0;
@@ -62,18 +62,29 @@ int main(){
             header[9]=counter & 0xFF;        // KAI TON ARITHMO 65535 //MPOREI NA TO AUKSISOUME AMA XREIASTEI
             header[10]=(next >> 8) & 0xFF;
             header[11]=next & 0xFF;
-            uint8_t *data=(uint8_t*)malloc((next-12)*sizeof(sizeof(uint8_t)));
+            /*clock_gettime(CLOCK_REALTIME, &now);
+            header[12]=(now.tv_sec >>24)& 0xFF;
+            header[13]=(now.tv_sec >>16)& 0xFF;
+            header[14]=(now.tv_sec >>8)& 0xFF;
+            header[15]=now.tv_sec & 0xFF;
+
+            header[16]=(now.tv_nsec >>24)& 0xFF;
+            header[17]=(now.tv_nsec >>16)& 0xFF;
+            header[18]=(now.tv_nsec >>8)& 0xFF;
+            header[19]=now.tv_nsec & 0xFF;
+            cout<<"TEST S:"<<now.tv_sec<<" Test N:"<<now.tv_nsec<<endl;*/
+            uint8_t *data=(uint8_t*)malloc((next)*sizeof(sizeof(uint8_t)));
             FILE* fd = fopen("/dev/urandom", "rb");
             fread(data,sizeof(uint8_t),next,fd);
             fclose(fd);
             for(int i=0; i<(next-12); i++){
                 header[i+12]=data[i];
             }
-            sendto(sock, header, next, 0, (const struct sockaddr*)&serverInfo, sizeof(serverInfo));
+            sendto(sock, header, next, MSG_WAITALL, (struct sockaddr*)&serverInfo,sizeof(serverInfo));
             counter++;
             free(data);
         }
-        usleep(1000000); //SLEEP 1 SECOND
+        //usleep(5000000); //SLEEP 1 SECOND
     }
     return 0;
 }

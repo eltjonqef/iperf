@@ -7,12 +7,23 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <map>
-
+#include <iomanip>
+#include <thread>
+#include <mutex>
 using namespace std;
 
 struct sockaddr_in serverInfo;
 struct sockaddr_in clientInfo;
-
+size_t receivedBytes=0;
+mutex increment;
+void throughput(){
+    usleep(1000000);
+    increment.lock();
+    cout<<receivedBytes*8/1024/1024<<endl;
+    receivedBytes=0;
+    increment.unlock();
+    throughput();
+}
 int main(){
 
     int sock;
@@ -23,9 +34,9 @@ int main(){
     memset(&serverInfo, 0, sizeof(serverInfo));
     memset(&clientInfo, 0, sizeof(clientInfo));
     serverInfo.sin_family=AF_INET;
-    serverInfo.sin_port=htons(56000);
-    serverInfo.sin_addr.s_addr=htonl(INADDR_ANY);
-    if(bind(sock, (struct sockaddr *) &serverInfo, sizeof(struct sockaddr_in))==-1){
+    serverInfo.sin_addr.s_addr=INADDR_ANY;
+    serverInfo.sin_port=htons(56587);
+    if(bind(sock, (const struct sockaddr *) &serverInfo, sizeof(serverInfo))==-1){
         perror("UDP bind");
         exit(EXIT_FAILURE);
     }
@@ -34,38 +45,49 @@ int main(){
     int counter=0;
     int clientPacketCounter=0;
     int serverPacketCounter=0;
+    double previous, newS;
+    struct timespec now;
+    uint32_t startSeconds,startNSeconds, finishSeconds,finishNSeconds;
+    thread first (throughput);
+    uint8_t *buffer=(uint8_t*)malloc(65535*sizeof(uint8_t));
     while(1){
-        struct timespec clockStart, clockEnd;
-        size_t receivedBytes=0;
-        int flag=0;
-        while(1){
-            uint8_t *buffer=(uint8_t*)malloc(65535*sizeof(uint8_t));
-            if(receivedBytes==0){
-                /*
-                    this shows that we have a new packet, so we need to start jitter clock
-                    right after the packet arrives...so we start the clock after recvfrom
-                */
+        //size_t receivedBytes=0;
+        //while(1){
+            
+            /*if(firstPacket==1){
+                firstPacket=0;
                 flag=1;
-            }
-            receivedBytes+=recvfrom(sock, buffer, 65535, 0,(struct sockaddr *)&clientInfo, &len);
-            serverPacketCounter++;
+            }*/
+            receivedBytes+=recvfrom(sock, buffer, 65535, MSG_WAITALL,(struct sockaddr *)&clientInfo, &len);
+            /*if(flag==1){
+                startSeconds=buffer[12];
+                startSeconds=(startSeconds<<8)| buffer[13];
+                startSeconds=(startSeconds<<8)| buffer[14];
+                startSeconds=(startSeconds<<8)| buffer[15];
+                startNSeconds=buffer[16];
+                startNSeconds=(startNSeconds<<8)| buffer[17];
+                startNSeconds=(startNSeconds<<8)| buffer[18];
+                startNSeconds=(startNSeconds<<8)| buffer[19]; 
 
-            if(flag==1){
-                //start clock
-                clock_gettime(CLOCK_REALTIME, &clockStart);
                 flag=0;
-            }
-            if(((buffer[10] << 8) | buffer[11])!=65507){
-                //stop clock
-                clientPacketCounter=(buffer[8] << 8) | buffer[9];
-                clock_gettime(CLOCK_REALTIME, &clockEnd);
-                break;
-            }
-            free(buffer);
-        }
-        cout<<"Goodput: "<<receivedBytes<<endl; 
-        cout<<"Jitter: "<<(clockEnd.tv_sec - clockStart.tv_sec)+(clockEnd.tv_nsec - clockStart.tv_nsec)/ 1E9<<endl;
-        cout<<"Lost: "<<clientPacketCounter -serverPacketCounter<<"/"<<serverPacketCounter<<endl;
+            }*/
+            serverPacketCounter++;
+            //if(((buffer[10] << 8) | buffer[11])!=65507){
+                /*clock_gettime(CLOCK_REALTIME, &now);
+                finishSeconds=now.tv_sec;
+                finishNSeconds=now.tv_nsec;
+                clientPacketCounter=(buffer[8] << 8) | buffer[9];*/
+               // break;
+            //}
+            //free(buffer);
+        //}
+        /*cout<<"Goodput: "<<endl; 
+        double delta=(finishSeconds-startSeconds)+1.0e-9*(finishNSeconds-startNSeconds);
+        cout<<receivedBytes<<endl;
+        cout<<delta<<endl;
+        cout<<(receivedBytes/delta)/1000<<endl;
+        //cout<<"Jitter: "<<(double)(clockEnd.tv_sec - clockStart.tv_sec)+1.0e-9*(clockEnd.tv_nsec - clockStart.tv_nsec)<<endl;
+        cout<<"Lost: "<<clientPacketCounter -serverPacketCounter<<"/"<<serverPacketCounter<<endl;*/
     }
     return 0;
 }
