@@ -10,22 +10,37 @@
 #include <iomanip>
 #include <thread>
 #include <mutex>
+#include <cmath>
 using namespace std;
 
 struct sockaddr_in serverInfo;
 struct sockaddr_in clientInfo;
 size_t receivedBytes=0;
 mutex increment;
-void throughput(){
+string suffixes[4];
+uint32_t totalPackets=0;
+uint32_t packetCounter=0;
+    
+void print(){
     usleep(1000000);
     increment.lock();
-    cout<<(double)receivedBytes*8/1024/1024<<endl;
+    uint s=0;
+    double count=receivedBytes*8;
+    while(count>=1024 && s<4){
+        s++;
+        count/=1024;
+    }
+    cout<<"Goodput: "<<count<<" "<< suffixes[s]<<endl;
     receivedBytes=0;
+    cout<<"Lost Packets/Total: "<<totalPackets-packetCounter<<"/"<<packetCounter<<endl;
     increment.unlock();
-    throughput();
+    print();
 }
 int main(){
-
+    suffixes[0] = "b/s";
+    suffixes[1] = "Kb/s";
+    suffixes[2] = "Mb/s";
+    suffixes[3] = "Gb/s";
     int sock;
     if((sock=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==-1){
         perror("opening UDP socket");
@@ -43,10 +58,15 @@ int main(){
     
     socklen_t len=sizeof(clientInfo);
 
-    thread first (throughput);
+    thread first (print);
     uint8_t *buffer=(uint8_t*)malloc(65535*sizeof(uint8_t));
     while(1){
             receivedBytes+=recvfrom(sock, buffer, 65535, MSG_WAITALL,(struct sockaddr *)&clientInfo, &len);
+            totalPackets=buffer[0];
+            totalPackets=(totalPackets<<8)|buffer[1];
+            totalPackets=(totalPackets<<8)|buffer[2];
+            totalPackets=(totalPackets<<8)|buffer[3];
+            packetCounter++;
     }
     return 0;
 }
