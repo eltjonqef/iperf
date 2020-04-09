@@ -19,7 +19,7 @@ mutex increment;
 void throughput(){
     usleep(1000000);
     increment.lock();
-    cout<<(double)receivedBytes*8/1024/1024/1024<<endl;
+    cout<<(double)receivedBytes*8/1024/1024<<endl;
     receivedBytes=0;
     increment.unlock();
     throughput();

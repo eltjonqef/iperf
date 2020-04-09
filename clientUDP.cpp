@@ -9,7 +9,7 @@
 #include <map>
 #define PORT 56587
 #define DATALIMIT 65507
-#define BANDWIDTH 10000000
+#define BANDWIDTH 1000000000
 
 using namespace std;
 
@@ -27,13 +27,24 @@ int main(){
         exit(EXIT_FAILURE);
     }
     memset(&serverInfo, 0, sizeof(serverInfo));
-      
+    int fullData=(BANDWIDTH/8)/DATALIMIT;
     serverInfo.sin_family = AF_INET; 
     serverInfo.sin_addr.s_addr = INADDR_ANY;
     serverInfo.sin_port = htons(PORT); 
     while(1){
-        sendto(sock, data, DATALIMIT, MSG_WAITALL, (struct sockaddr*)&serverInfo,sizeof(serverInfo));
+        size_t sent=0;
+        int i=0;
+        while(i!=fullData){
+            sendto(sock, data, DATALIMIT, MSG_WAITALL, (struct sockaddr*)&serverInfo,sizeof(serverInfo));
+            i++;
+            sent+=DATALIMIT;
+        }
+        if((BANDWIDTH/8)/DATALIMIT!=0){
+            sendto(sock, data, (BANDWIDTH/8)-fullData*DATALIMIT, MSG_WAITALL, (struct sockaddr*)&serverInfo,sizeof(serverInfo));
+            sent+=(BANDWIDTH/8)-fullData*DATALIMIT;
+        }
+        cout<<sent*8<<endl;
+        usleep(1000000);
     }
-    int counter=1;
     return 0;
 }
