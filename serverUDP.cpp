@@ -61,9 +61,7 @@ int main(){
     thread first (print);
     uint8_t *buffer=(uint8_t*)malloc(65535*sizeof(uint8_t));
     while(1){
-            increment.lock();
             receivedBytes+=recvfrom(sock, buffer, 65535, MSG_WAITALL,(struct sockaddr *)&clientInfo, &len);
-            increment.unlock();
             totalPackets=buffer[0];
             totalPackets=(totalPackets<<8)|buffer[1];
             totalPackets=(totalPackets<<8)|buffer[2];
