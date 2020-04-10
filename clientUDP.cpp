@@ -10,19 +10,26 @@
 #include <vector>
 #include <thread>
 #define PORT 56587
-#define BANDWIDTH 1000000
-int DATALIMIT=1000;
+#define BANDWIDTH 1000000000
+int DATALIMIT;
 using namespace std;
-int sleepTime=1000000;
 vector<int> bucket;
+int sleepTime;
 void fillBucket(){
-    while(bucket.size()<BANDWIDTH/DATALIMIT){
+    if(bucket.size()<BANDWIDTH/DATALIMIT){
         bucket.push_back(1);
-        usleep(1000000/(BANDWIDTH/DATALIMIT));
-    }
+    }usleep(sleepTime);
+    fillBucket();
 }
 int main(){
-    
+    if(BANDWIDTH<=524056){
+        DATALIMIT=BANDWIDTH;
+        sleepTime=1000000/(BANDWIDTH/DATALIMIT);
+    }
+    else {
+        DATALIMIT=500000;
+        sleepTime=1000000/(BANDWIDTH/DATALIMIT);
+    }
     uint8_t *data=(uint8_t*)malloc(DATALIMIT*sizeof(sizeof(uint8_t)));
     FILE* fd = fopen("/dev/urandom", "rb");
     fread(data,sizeof(uint8_t),DATALIMIT,fd);
