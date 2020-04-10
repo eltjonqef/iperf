@@ -7,13 +7,20 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <map>
+#include <vector>
+#include <thread>
 #define PORT 56587
-#define DATALIMIT 65507
-#define BANDWIDTH 10000000000
-
+#define BANDWIDTH 1000000
+int DATALIMIT=1000;
 using namespace std;
-
-
+int sleepTime=1000000;
+vector<int> bucket;
+void fillBucket(){
+    while(bucket.size()<BANDWIDTH/DATALIMIT){
+        bucket.push_back(1);
+        usleep(1000000/(BANDWIDTH/DATALIMIT));
+    }
+}
 int main(){
     
     uint8_t *data=(uint8_t*)malloc(DATALIMIT*sizeof(sizeof(uint8_t)));
@@ -32,9 +39,20 @@ int main(){
     serverInfo.sin_addr.s_addr = INADDR_ANY;
     serverInfo.sin_port = htons(PORT); 
     uint32_t counter=1;
+    thread first(fillBucket);
     while(1){
         size_t sent=0;
         int i=0;
+        if(!bucket.empty()){
+            bucket.pop_back();
+            data[0]=(counter >>24)& 0xFF;
+            data[1]=(counter >>16)& 0xFF;
+            data[2]=(counter >>8)& 0xFF;
+            data[3]=counter & 0xFF;
+            sendto(sock, data, DATALIMIT/8, MSG_WAITALL, (struct sockaddr*)&serverInfo,sizeof(serverInfo));
+            counter++;
+        }
+        /*
         while(i!=fullData){
             data[0]=(counter >>24)& 0xFF;
             data[1]=(counter >>16)& 0xFF;
@@ -52,7 +70,7 @@ int main(){
             sendto(sock, data, (BANDWIDTH/8)-fullData*DATALIMIT, MSG_WAITALL, (struct sockaddr*)&serverInfo,sizeof(serverInfo));
             counter++;
         }
-        usleep(1000000);
+        //usleep(1000000);*/    
     }
     return 0;
 }
