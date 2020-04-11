@@ -23,41 +23,43 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <map>
+#include <thread>
 
 using namespace std;
 
 void initTCP();
+uint16_t initUDP();
+void doMeasurements();
+void printData();
 
 uint16_t listening_port;
 uint32_t listening_IP;
-map<int, uint8_t*> headerC;
-map<uint8_t*, int> headerLenC;
-map<int, uint8_t*> headerS;
-map<uint8_t*, int> headerLenS;
-int sock;
-struct sockaddr_in serverInfo;
+
+int tcpSocket, udpSocket, clientTCP, clientUDP;
+struct sockaddr_in serverTCPInfo, serverUDPInfo, clientTCPInfo, clientUDPInfo;
+uint8_t *header;
+uint32_t packetCounter=0;
+uint32_t totalPackets=0;
+size_t throughput=0;
+string suffixes[4];
 int main(int argc, char **argv){
 
-    headerC[0]=(uint8_t*)"iperf";
-    headerC[1]=(uint8_t*)"init";
-    headerC[2]=(uint8_t*)"4"; //AUTO EDW LEW NA NAI TO DATA LENGTH
-    headerC[3]=(uint8_t*)"close";
-
-    headerLenC[(uint8_t*)"iperf"]=5;
-    headerLenC[(uint8_t*)"init"]=4;
-    headerLenC[(uint8_t*)"4"]=1;
-    headerLenC[(uint8_t*)"close"]=5;
-
-    headerS[0]=(uint8_t*)"iperf";
-    headerS[1]=(uint8_t*)"acc";
-    headerS[2]=(uint8_t*)"dec";
-    headerS[3]=(uint8_t*)"5";
-
-    headerLenS[(uint8_t*)"iperf"]=5;
-    headerLenS[(uint8_t*)"acc"]=3;
-    headerLenS[(uint8_t*)"dec"]=3;
-    headerLenS[(uint8_t*)"5"]=1;
-
+    header=(uint8_t*)malloc(500*sizeof(uint8_t));
+    header[0]='i';
+    header[1]='p';
+    header[2]='e';
+    header[3]='r';
+    header[4]='f';
+    header[5]='a';
+    header[6]='c';
+    header[7]='c';
+    header[8]=2;
+    header[9]=1;
+    header[10]=2;
+    suffixes[0] = "b/s";
+    suffixes[1] = "Kb/s";
+    suffixes[2] = "Mb/s";
+    suffixes[3] = "Gb/s";
     while (1){
         
         switch (getopt(argc, argv, "a:p:i:f:s"))
@@ -93,84 +95,120 @@ int main(int argc, char **argv){
 
 void initTCP(){
 
-    if((sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==-1){
+    if((tcpSocket=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==-1){
         perror("opening TCP listening socket");
         exit(EXIT_FAILURE);
     }
     
-    memset(&serverInfo, 0, sizeof(struct sockaddr_in));
-    serverInfo.sin_family=AF_INET;
-    serverInfo.sin_port=htons(listening_port);
-    serverInfo.sin_addr.s_addr=htonl(INADDR_ANY);
-    if(bind(sock, (struct sockaddr *) &serverInfo, sizeof(struct sockaddr_in))==-1){
+    memset(&serverTCPInfo, 0, sizeof(struct sockaddr_in));
+    serverTCPInfo.sin_family=AF_INET;
+    serverTCPInfo.sin_port=htons(listening_port);
+    serverTCPInfo.sin_addr.s_addr=htonl(INADDR_ANY);
+    if(bind(tcpSocket, (struct sockaddr *) &serverTCPInfo, sizeof(struct sockaddr_in))==-1){
         perror("TCP bind");
         exit(EXIT_FAILURE);
     }
-    int l=listen(sock, 1);    
+    int l=listen(tcpSocket, 1);    
 
-    struct sockaddr_in address;
-    memset(&address, 0, sizeof(struct sockaddr_in));
+    memset(&clientTCPInfo, 0, sizeof(struct sockaddr_in));
     socklen_t addressSize=sizeof(struct sockaddr_in);
-    int ac=accept(sock, (struct sockaddr *)&address, &addressSize);
-    if(ac==-1){
+    clientTCP=accept(tcpSocket, (struct sockaddr *)&clientTCPInfo, &addressSize);
+    if(clientTCP==-1){
         perror("TCP Accept");
         exit(EXIT_FAILURE);
     }
 
     cout<<"Established connection with client:\n";
-    cout<<"\tIP: "<<address.sin_port<<endl;
-    cout<<"\tPort: "<<inet_ntoa(address.sin_addr)<<endl;
-    cout<<"we accepted boyss\n";
+    cout<<"\tIP: "<<clientTCPInfo.sin_port<<endl;
+    cout<<"\tPort: "<<inet_ntoa(clientTCPInfo.sin_addr)<<endl;
 
-    int state=0;
-    while(1){
-        size_t receivedBytes=0;
-        uint8_t *buffer=(uint8_t*)malloc(sizeof(uint8_t));
-        while(receivedBytes!=headerLenC[headerC[state]]){
-            receivedBytes+=recv(ac, &buffer[receivedBytes], headerLenC[headerC[state]], 0);
-            if(receivedBytes==-1){
-                perror("TCP Recv");
-                exit(EXIT_FAILURE);
-            }
-        }
-        if(state==2 || memcmp(buffer,headerC[state], headerLenC[headerC[state]] )==0 ){
-            cout<<buffer<<endl;
-            state++;
-            free(buffer);
-            if(state==4)
-                break;
-        }
-        else{
-            free(buffer);
-            close(sock);
-            break;
-        }
+    size_t receivedBytes=0;
+
+
+    uint8_t *buffer=(uint8_t*)malloc(sizeof(uint8_t));
+    while(receivedBytes!=10){
+        receivedBytes+=recv(clientTCP, &buffer[receivedBytes], 1, 0);
     }
-    state=0;
-    while(1){
-        if(send(ac, headerS[state], headerLenS[headerS[state]], 0)==-1){
-            perror("TCP Send");
-            exit(EXIT_FAILURE);
-        }
-        state++;
-        if(state==2)
-            state++;
-        if(state==4)
-            break;
+    memset(&buffer[0], 0, sizeof(buffer));
+    receivedBytes=0;
+    while(receivedBytes!=buffer[9]){
+        receivedBytes+=recv(clientTCP, &buffer[receivedBytes], buffer[9], 0);
     }
-    while(1){
-        size_t receivedBytes=0;
-        uint8_t *buffer=(uint8_t*)malloc(sizeof(uint8_t));
-        while(receivedBytes!=headerLenC[headerC[3]]){
-            receivedBytes+=recv(ac, &buffer[receivedBytes], headerLenC[headerC[3]], 0);
-            if(receivedBytes==-1){
-                perror("TCP Recv");
-                exit(EXIT_FAILURE);
-            }
-        }
-        if(memcmp(buffer, headerC[3], headerLenC[headerC[3]])==0){
-            break;
-        }
+    cout<<buffer<<endl;
+    cout<<"Client requested "<<(int)buffer[0]<<" parallel stream, and "<<(int)buffer[1]<<endl;
+
+    uint16_t port=initUDP();
+    header[9]=(port >>8)&0xFF;
+    header[10]=port & 0xFF;
+
+    if(send(clientTCP, header, buffer[8], 0)==-1){
+        perror("TCP Send");
+        exit(EXIT_FAILURE);
     }
-    close(sock);
+    //thread measurements(doMeasurements);
+    doMeasurements();
+    receivedBytes=0;
+    while(receivedBytes!=9){
+        receivedBytes+=recv(clientTCP, &buffer[receivedBytes], 9, 0);
+    }
+    close(clientTCP);
+    close(tcpSocket);
+}
+
+uint16_t
+initUDP(){
+
+    if((udpSocket=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==-1){
+        perror("opening UDP socket");
+        exit(EXIT_FAILURE);
+    }
+    memset(&serverUDPInfo, 0, sizeof(serverUDPInfo));
+    memset(&clientUDPInfo, 0, sizeof(clientUDPInfo));
+
+    serverUDPInfo.sin_family=AF_INET;
+    serverUDPInfo.sin_addr.s_addr=INADDR_ANY;
+    serverUDPInfo.sin_port=htons(56587);
+
+    if(bind(udpSocket, (const struct sockaddr *) &serverUDPInfo, sizeof(serverUDPInfo))==-1){
+        perror("UDP bind");
+        exit(EXIT_FAILURE);
+    }
+    return ntohs(serverUDPInfo.sin_port);
+    
+}
+
+void
+doMeasurements(){
+
+    socklen_t len=sizeof(clientUDPInfo);
+    thread print(printData);
+    uint8_t *buffer=(uint8_t*)malloc(65535*sizeof(uint8_t));
+    uint32_t seconds, nseconds;
+    struct timespec now;
+    
+    while(1){
+        throughput+=recvfrom(udpSocket, buffer, 65535, MSG_WAITALL, (struct sockaddr*)&clientUDPInfo, &len);
+        totalPackets=buffer[0];
+        totalPackets=(totalPackets<<8)|buffer[1];
+        totalPackets=(totalPackets<<8)|buffer[2];
+        totalPackets=(totalPackets<<8)|buffer[3];
+        packetCounter++;
+    }
+}
+
+void
+printData(){
+    while(1){
+        usleep(1000000);
+        uint s=0;
+        double count=throughput*8;
+        throughput=0;
+        while(count>=1024 && s<4){
+            s++;
+            count/=1024;
+        }
+        cout<<"Goodput: "<<count<<" "<< suffixes[s]<<endl;
+        cout<<"Lost Packets/Total: "<<totalPackets-packetCounter<<"/"<<packetCounter<<endl;
+        
+    }
 }

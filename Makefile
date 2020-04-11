@@ -1,6 +1,6 @@
 all:
-	g++ -o client client.cpp
-	g++ -g -o server server.cpp
+	g++ -pthread -o client client.cpp
+	g++ -pthread -o server server.cpp
 
 clean:
 	rm client server
