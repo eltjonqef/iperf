@@ -30,9 +30,9 @@ void print(){
         s++;
         count/=1024;
     }
-    cout<<"Goodput: "<<count<<" "<< suffixes[s]<<endl;
+    //cout<<"Goodput: "<<count<<" "<< suffixes[s]<<endl;
     receivedBytes=0;
-    cout<<"Lost Packets/Total: "<<totalPackets-packetCounter<<"/"<<packetCounter<<endl;
+    //cout<<"Lost Packets/Total: "<<totalPackets-packetCounter<<"/"<<packetCounter<<endl;
     increment.unlock();
     print();
 }
@@ -60,12 +60,28 @@ int main(){
 
     thread first (print);
     uint8_t *buffer=(uint8_t*)malloc(65535*sizeof(uint8_t));
+    uint32_t seconds, nseconds;
+    struct timespec now;
     while(1){
             receivedBytes+=recvfrom(sock, buffer, 65535, MSG_WAITALL,(struct sockaddr *)&clientInfo, &len);
+            clock_gettime(CLOCK_MONOTONIC, &now);
             totalPackets=buffer[0];
             totalPackets=(totalPackets<<8)|buffer[1];
             totalPackets=(totalPackets<<8)|buffer[2];
             totalPackets=(totalPackets<<8)|buffer[3];
+            seconds=buffer[4];
+            seconds=(seconds<<8)|buffer[5];
+            seconds=(seconds<<8)|buffer[6];
+            seconds=(seconds<<8)|buffer[7];
+            nseconds=buffer[8];
+            nseconds=(nseconds<<8)|buffer[9];
+            nseconds=(nseconds<<8)|buffer[10];
+            nseconds=(nseconds<<8)|buffer[11];
+            //cout<<now.tv_sec<<" "<<seconds<<endl;
+            cout<<now.tv_sec<<" "<<now.tv_nsec<<endl;
+            cout<<seconds<<" "<<nseconds<<endl;
+            cout<<(now.tv_sec-seconds)+1.0e-9*(now.tv_nsec-nseconds)<<endl;
+            return 0;
             packetCounter++;
     }
     return 0;
