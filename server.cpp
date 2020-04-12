@@ -33,7 +33,7 @@ void doMeasurements();
 void printData();
 
 uint16_t listening_port;
-uint32_t listening_IP;
+uint32_t listening_IP=INADDR_ANY;
 
 int tcpSocket, udpSocket, clientTCP, clientUDP;
 struct sockaddr_in serverTCPInfo, serverUDPInfo, clientTCPInfo, clientUDPInfo;
@@ -67,10 +67,8 @@ int main(int argc, char **argv){
         {
             case 'a':
                 //IP of server interface
-                if(optarg)
-                    listening_IP=inet_addr(optarg);//pros to parwn vale IP to 127.0.0.1 gia na paizeis bala sto pc sou
-                else
-                    listening_IP=INADDR_ANY; //i if dn leitourge, skeftomouna na valw -a kai na mhn valw argument alla dn ginetai
+                cout<<optarg<<endl;
+                listening_IP=inet_addr(optarg);//pros to parwn vale IP to 127.0.0.1 gia na paizeis bala sto pc sou
                 continue;
             case 'p':
                 //port of server interface
@@ -104,7 +102,7 @@ void initTCP(){
     memset(&serverTCPInfo, 0, sizeof(struct sockaddr_in));
     serverTCPInfo.sin_family=AF_INET;
     serverTCPInfo.sin_port=htons(listening_port);
-    serverTCPInfo.sin_addr.s_addr=htonl(INADDR_ANY);
+    serverTCPInfo.sin_addr.s_addr=listening_IP;
     if(bind(tcpSocket, (struct sockaddr *) &serverTCPInfo, sizeof(struct sockaddr_in))==-1){
         perror("TCP bind");
         exit(EXIT_FAILURE);
@@ -170,7 +168,7 @@ initUDP(){
     memset(&clientUDPInfo, 0, sizeof(clientUDPInfo));
 
     serverUDPInfo.sin_family=AF_INET;
-    serverUDPInfo.sin_addr.s_addr=INADDR_ANY;
+    serverUDPInfo.sin_addr.s_addr=listening_IP;
     serverUDPInfo.sin_port=htons(56587);
 
     if(bind(udpSocket, (const struct sockaddr *) &serverUDPInfo, sizeof(serverUDPInfo))==-1){

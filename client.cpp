@@ -35,7 +35,7 @@
 #include <atomic>
 #include <thread>
 #include <signal.h>
-#define BANDWIDTH 1000
+int BANDWIDTH;
 int DATALIMIT;
 using namespace std;
 
@@ -44,7 +44,7 @@ void doMeasurements(uint16_t port);
 void fillBucket();
 void intHandler(int dummy);
 uint16_t listening_port;
-uint32_t listening_IP;
+uint32_t listening_IP=INADDR_ANY;
 uint8_t *header;
 map<int, uint8_t*> headerC;
 map<uint8_t*, int> headerLenC;
@@ -114,9 +114,11 @@ int main(int argc, char **argv){
                 continue;
             case 'l':
                 //udp packet size
+                DATALIMIT=atoi(optarg);
                 continue;
             case 'b':
                 //bandwidth (NOMIZW EXEI BONUS GIAUTO)
+                BANDWIDTH=atoi(optarg);
                 continue;
             case 'n':
                 //no of parallel data streams
@@ -152,7 +154,7 @@ void initTCP(){
     memset(&serverTCPInfo, 0, sizeof(struct sockaddr_in));
     serverTCPInfo.sin_family=AF_INET;
     serverTCPInfo.sin_port=htons(listening_port);
-    serverTCPInfo.sin_addr.s_addr=htonl(INADDR_ANY);
+    serverTCPInfo.sin_addr.s_addr=listening_IP;
     if(connect(sock, (struct sockaddr *) &serverTCPInfo, sizeof(struct sockaddr_in))==-1){
         perror("TCP connect");
         exit(EXIT_FAILURE);
@@ -192,12 +194,12 @@ void initTCP(){
 void
 doMeasurements(uint16_t port){
     
-    if(BANDWIDTH<=524056){
+   /* if(BANDWIDTH<=524056){
         DATALIMIT=BANDWIDTH;
     }
     else {
         DATALIMIT=500000;
-    }
+    }*/
     signal(SIGINT, intHandler);
     uint8_t *data=(uint8_t*)malloc(DATALIMIT*sizeof(sizeof(uint8_t)));
     FILE* fd = fopen("/dev/urandom", "rb");
@@ -209,7 +211,7 @@ doMeasurements(uint16_t port){
     }
     memset(&serverUDPInfo, 0, sizeof(serverUDPInfo));
     serverUDPInfo.sin_family=AF_INET;
-    serverUDPInfo.sin_addr.s_addr=INADDR_ANY;
+    serverUDPInfo.sin_addr.s_addr=listening_IP;
     serverUDPInfo.sin_port=htons(port);
     uint32_t counter=1;
     thread bucketThread(fillBucket);
@@ -249,10 +251,10 @@ void
 fillBucket(){
 
     while(keepRunning){
-        if(bucket.load(std::memory_order_relaxed)<BANDWIDTH/DATALIMIT){
+        if(bucket.load(std::memory_order_relaxed)<BANDWIDTH/(DATALIMIT)){
             bucket.fetch_add(1, std::memory_order_relaxed);
         }
-        usleep(1000000/(BANDWIDTH/DATALIMIT));
+        usleep(1000000/(BANDWIDTH/(DATALIMIT)));
     }
 }
 
