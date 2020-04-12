@@ -24,7 +24,7 @@
 #include <stdint.h>
 #include <map>
 #include <thread>
-
+#include <signal.h>
 using namespace std;
 
 void initTCP();
@@ -42,6 +42,7 @@ uint32_t packetCounter=0;
 uint32_t totalPackets=0;
 size_t throughput=0;
 string suffixes[4];
+static volatile int keepRunning = 1;
 int main(int argc, char **argv){
 
     header=(uint8_t*)malloc(500*sizeof(uint8_t));
@@ -146,13 +147,16 @@ void initTCP(){
         exit(EXIT_FAILURE);
     }
     //thread measurements(doMeasurements);
-    doMeasurements();
+    thread measurements(doMeasurements);
     receivedBytes=0;
     while(receivedBytes!=9){
         receivedBytes+=recv(clientTCP, &buffer[receivedBytes], 9, 0);
     }
+    //keepRunning=0;
+    measurements.detach();
+    //measurements.join();
     close(clientTCP);
-    close(tcpSocket);
+    close(tcpSocket);cout<<buffer<<endl;
 }
 
 uint16_t
@@ -186,19 +190,20 @@ doMeasurements(){
     uint32_t seconds, nseconds;
     struct timespec now;
     
-    while(1){
+    while(keepRunning){
         throughput+=recvfrom(udpSocket, buffer, 65535, MSG_WAITALL, (struct sockaddr*)&clientUDPInfo, &len);
         totalPackets=buffer[0];
         totalPackets=(totalPackets<<8)|buffer[1];
         totalPackets=(totalPackets<<8)|buffer[2];
         totalPackets=(totalPackets<<8)|buffer[3];
         packetCounter++;
-    }
+    }cout<<"AAA\n";
+    print.join();
 }
 
 void
 printData(){
-    while(1){
+    while(keepRunning){
         usleep(1000000);
         uint s=0;
         double count=throughput*8;
@@ -211,4 +216,5 @@ printData(){
         cout<<"Lost Packets/Total: "<<totalPackets-packetCounter<<"/"<<packetCounter<<endl;
         
     }
+    cout<<"TELOS?\n";
 }

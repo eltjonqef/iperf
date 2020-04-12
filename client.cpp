@@ -34,6 +34,7 @@
 #include <map>
 #include <atomic>
 #include <thread>
+#include <signal.h>
 #define BANDWIDTH 1000
 int DATALIMIT;
 using namespace std;
@@ -41,6 +42,7 @@ using namespace std;
 void initTCP();
 void doMeasurements(uint16_t port);
 void fillBucket();
+void intHandler(int dummy);
 uint16_t listening_port;
 uint32_t listening_IP;
 uint8_t *header;
@@ -53,7 +55,7 @@ int sock;
 sockaddr_in serverTCPInfo, serverUDPInfo;
 atomic<int> bucket;
 int udpSocket;
-
+static volatile int keepRunning = 1;
 int main(int argc, char **argv){
 
     headerC[0]=(uint8_t*)"iperf";
@@ -180,7 +182,6 @@ void initTCP(){
     header[6]='t';
     header[7]='o';
     header[8]='p';
-    usleep(2000000);
     if(send(sock, header, 9, 0)==-1){
         perror("TCP Send");
         exit(EXIT_FAILURE);
@@ -197,6 +198,7 @@ doMeasurements(uint16_t port){
     else {
         DATALIMIT=500000;
     }
+    signal(SIGINT, intHandler);
     uint8_t *data=(uint8_t*)malloc(DATALIMIT*sizeof(sizeof(uint8_t)));
     FILE* fd = fopen("/dev/urandom", "rb");
     fread(data,sizeof(uint8_t),DATALIMIT,fd);
@@ -212,7 +214,7 @@ doMeasurements(uint16_t port){
     uint32_t counter=1;
     thread bucketThread(fillBucket);
     struct timespec now, prev;
-    while(1){
+    while(keepRunning){
         if(bucket.load(std::memory_order_relaxed)){
             bucket.fetch_sub(1, std::memory_order_relaxed);
             data[0]=(counter >>24)& 0xFF;
@@ -240,15 +242,20 @@ doMeasurements(uint16_t port){
 */           counter++;
         }
     }
+    bucketThread.join();
 }
 
 void
 fillBucket(){
 
-    while(1){
+    while(keepRunning){
         if(bucket.load(std::memory_order_relaxed)<BANDWIDTH/DATALIMIT){
             bucket.fetch_add(1, std::memory_order_relaxed);
         }
         usleep(1000000/(BANDWIDTH/DATALIMIT));
     }
+}
+
+void intHandler(int dummy) {
+    keepRunning = 0;
 }
