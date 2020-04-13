@@ -35,6 +35,7 @@
 #include <atomic>
 #include <thread>
 #include <signal.h>
+
 int BANDWIDTH;
 int DATALIMIT;
 using namespace std;
@@ -87,7 +88,7 @@ int main(int argc, char **argv){
     header[6]='n';
     header[7]='i';
     header[8]='t';
-    header[9]=2;
+    header[9]=10;
     header[10]=0;
     header[11]=0;
 
@@ -128,6 +129,7 @@ int main(int argc, char **argv){
                 //duration
                 continue;
             case 'd':
+                cout<<"GAMW T PANAGIA\n";
                 //measure the one way delay
                 header[11]=1;
                 continue;
@@ -160,7 +162,17 @@ void initTCP(){
         exit(EXIT_FAILURE);
     }
     int state=0;
-    if(send(sock, header, 12, 0)==-1){
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    header[12]=(now.tv_sec>>24)& 0xFF;
+    header[13]=(now.tv_sec>>16)& 0xFF;
+    header[14]=(now.tv_sec>>8)& 0xFF;
+    header[15]=now.tv_sec& 0xFF;
+    header[16]=(now.tv_nsec>>24)& 0xFF;
+    header[17]=(now.tv_nsec>>16)& 0xFF;
+    header[18]=(now.tv_nsec>>8)& 0xFF;
+    header[19]=now.tv_nsec& 0xFF;
+    if(send(sock, header, 20, 0)==-1){
         perror("TCP Send");
         exit(EXIT_FAILURE);
     }
@@ -168,11 +180,10 @@ void initTCP(){
     uint8_t *buffer=(uint8_t*)malloc(sizeof(uint8_t));
     while(receivedBytes!=9){
         receivedBytes+=recv(sock, &buffer[receivedBytes], 1, 0);
-    }cout<<buffer<<endl;
+    }
     memset(&buffer[0], 0, sizeof(buffer));
     receivedBytes=0;
-    cout<<(int)buffer[8]<<endl;
-    while(receivedBytes!=buffer[8]){cout<<receivedBytes<<endl;
+    while(receivedBytes!=buffer[8]){
         receivedBytes+=recv(sock, &buffer[receivedBytes], buffer[8], 0);
     }
     uint16_t port=buffer[0];
@@ -190,7 +201,7 @@ void initTCP(){
     }
     close(sock);
 }
-
+size_t dataSent=0;
 void
 doMeasurements(uint16_t port){
     
@@ -232,7 +243,7 @@ doMeasurements(uint16_t port){
             data[9]=(now.tv_nsec >>16)& 0xFF;
             data[10]=(now.tv_nsec >>8)& 0xFF;
             data[11]= now.tv_nsec & 0xFF;
-            sendto(udpSocket, data, DATALIMIT/8, MSG_WAITALL, (struct sockaddr*)&serverUDPInfo,sizeof(serverUDPInfo));
+            dataSent+=sendto(udpSocket, data, DATALIMIT/8, MSG_WAITALL, (struct sockaddr*)&serverUDPInfo,sizeof(serverUDPInfo));
             //cout<<now.tv_sec<<" "<<now.tv_nsec<<endl;
 /*            if(now.tv_sec-prev.tv_sec>=1){ AUTO EDW BOREI NA TO VALOUME GIA NA KANOUME PIO AKRIVES TO BITRATE
                 if(sent<BANDWIDTH/8-80){
@@ -251,10 +262,11 @@ void
 fillBucket(){
 
     while(keepRunning){
-        if(bucket.load(std::memory_order_relaxed)<BANDWIDTH/(DATALIMIT)){
+        while(bucket.load(std::memory_order_relaxed)<BANDWIDTH/(DATALIMIT)){
             bucket.fetch_add(1, std::memory_order_relaxed);
+            usleep(1000000/(BANDWIDTH/(DATALIMIT)));
         }
-        usleep(1000000/(BANDWIDTH/(DATALIMIT)));
+        
     }
 }
 
