@@ -35,7 +35,8 @@
 #include <atomic>
 #include <thread>
 #include <signal.h>
-
+#include <fstream>
+#include <iomanip>
 int BANDWIDTH;
 int DATALIMIT;
 using namespace std;
@@ -43,41 +44,32 @@ using namespace std;
 void initTCP();
 void doMeasurements(uint16_t port);
 void fillBucket();
+void printData();
 void intHandler(int dummy);
+char *file=NULL;
 uint16_t listening_port;
 uint32_t listening_IP=INADDR_ANY;
 uint8_t *header;
+int interval=1;
 map<int, uint8_t*> headerC;
 map<uint8_t*, int> headerLenC;
 map<int, uint8_t*> headerS;
 map<uint8_t*, int> headerLenS;
 int parallelStreams;
 int sock;
+string suffixes[4];
+uint32_t counter;
 sockaddr_in serverTCPInfo, serverUDPInfo;
 atomic<int> bucket;
 int udpSocket;
+int duration;
 static volatile int keepRunning = 1;
 int main(int argc, char **argv){
-
-    headerC[0]=(uint8_t*)"iperf";
-    headerC[1]=(uint8_t*)"init";
-    headerC[2]=(uint8_t*)"4"; //AUTO EDW LEW NA NAI TO DATA LENGTH
-    headerC[3]=(uint8_t*)"close";
-
-    headerLenC[(uint8_t*)"iperf"]=5;
-    headerLenC[(uint8_t*)"init"]=4;
-    headerLenC[(uint8_t*)"4"]=1;
-    headerLenC[(uint8_t*)"close"]=5;
-
-    headerS[0]=(uint8_t*)"iperf";
-    headerS[1]=(uint8_t*)"acc";
-    headerS[2]=(uint8_t*)"dec";
-    headerS[3]=(uint8_t*)"5";
-
-    headerLenS[(uint8_t*)"iperf"]=5;
-    headerLenS[(uint8_t*)"acc"]=3;
-    headerLenS[(uint8_t*)"dec"]=3;
-    headerLenS[(uint8_t*)"5"]=1;
+suffixes[0] = "b/s";
+    suffixes[1] = "Kb/s";
+    suffixes[2] = "Mb/s";
+    suffixes[3] = "Gb/s";
+    
     header=(uint8_t*)malloc(500*sizeof(uint8_t));
     header[0]='i';
     header[1]='p';
@@ -106,9 +98,11 @@ int main(int argc, char **argv){
                 continue;
             case 'i':
                 //interval of printed info
+                interval=atoi(optarg);
                 continue;
             case 'f':
                 //output file
+                file=optarg;
                 continue;
             case 'c':
                 //client mode, dont know what we will do with this since we have seperate files
@@ -127,14 +121,15 @@ int main(int argc, char **argv){
                 continue;
             case 't':
                 //duration
+                duration=atoi(optarg);
                 continue;
             case 'd':
-                cout<<"GAMW T PANAGIA\n";
                 //measure the one way delay
                 header[11]=1;
                 continue;
             case 'w':
                 //wait seconds before start
+                usleep(atoi(optarg)*1000000);
                 continue;
             default:
                 break;
@@ -188,7 +183,7 @@ void initTCP(){
     }
     uint16_t port=buffer[0];
     port=(port<<8)|buffer[1];
-    cout<<"Connecting to port : "<<port<<endl;
+    cout<<"Connecting to port: "<<port<<endl;
     doMeasurements(port);
     memset(&header[5], 0, sizeof(header));
     header[5]='s';
@@ -200,6 +195,10 @@ void initTCP(){
         exit(EXIT_FAILURE);
     }
     close(sock);
+}
+void durationFunc(){
+    usleep(duration*1000000);
+    intHandler(1);
 }
 size_t dataSent=0;
 void
@@ -224,8 +223,11 @@ doMeasurements(uint16_t port){
     serverUDPInfo.sin_family=AF_INET;
     serverUDPInfo.sin_addr.s_addr=listening_IP;
     serverUDPInfo.sin_port=htons(port);
-    uint32_t counter=1;
+    counter=1;
+    thread durationThread;
+    if(duration) durationThread=thread (durationFunc);
     thread bucketThread(fillBucket);
+    thread printMeasurements(printData);
     struct timespec now, prev;
     while(keepRunning){
         if(bucket.load(std::memory_order_relaxed)){
@@ -256,20 +258,68 @@ doMeasurements(uint16_t port){
         }
     }
     bucketThread.join();
+    printMeasurements.join();
+    if(duration) durationThread.join();
 }
 
 void
 fillBucket(){
 
     while(keepRunning){
-        while(bucket.load(std::memory_order_relaxed)<BANDWIDTH/(DATALIMIT)){
+        if(bucket.load(std::memory_order_relaxed)<BANDWIDTH/(DATALIMIT)){
             bucket.fetch_add(1, std::memory_order_relaxed);
-            usleep(1000000/(BANDWIDTH/(DATALIMIT)));
         }
-        
+        usleep(1000000/(BANDWIDTH/(DATALIMIT)));
     }
 }
 
 void intHandler(int dummy) {
     keepRunning = 0;
+}
+
+template<typename T> void printElement(T t, const int &width){
+    if(file){
+        ofstream outfile;
+        outfile.open(file, ios_base::app);
+        outfile<<left<<setw(width)<<setfill(' ')<<t;
+        outfile.close();
+    }
+    cout<<left<<setw(width)<<setfill(' ')<<t;
+}
+
+void
+printData(){
+    printElement("No", 5);
+        printElement("Throughput", 20);
+        printElement("Goodput", 20);
+        printElement("Total Packets", 20);
+        cout<<endl;
+        if(file){
+            ofstream outfile;
+            outfile.open(file, ios_base::app);
+            outfile<<"\n";
+            outfile.close();
+        }
+        int i=1;
+        while(keepRunning){
+            usleep(interval*1000000);
+            uint s=0;
+            double count=dataSent*8;
+            count/=interval;
+            while(count>=1024 && s<4){
+                s++;
+                count/=1024;
+            }
+            printElement(i, 5);i++;
+            printElement(to_string(count)+" "+suffixes[s], 20);
+            printElement(to_string(count)+" "+suffixes[s], 20);
+            printElement(to_string(counter), 20);dataSent=0;
+            cout<<endl;
+            if(file){
+                ofstream outfile;
+                outfile.open(file, ios_base::app);
+                outfile<<"\n";
+                outfile.close();
+            }      
+        }
 }

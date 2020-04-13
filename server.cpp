@@ -62,7 +62,7 @@ struct data{
     double OWD;
 };
 stack <data> printStack;
-int interval=0;
+int interval=1;
 int main(int argc, char **argv){
 
     header=(uint8_t*)malloc(500*sizeof(uint8_t));
