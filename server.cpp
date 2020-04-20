@@ -164,6 +164,7 @@ void initTCP(){
     if(buffer[1]==1){
         owd=1;
     }
+    int threadsNo=buffer[0];  
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     uint32_t seconds=buffer[2];
@@ -175,23 +176,43 @@ void initTCP(){
     nseconds=(nseconds<<8)|buffer[8];
     nseconds=(nseconds<<8)|buffer[9];
     syncClocks=(now.tv_sec-seconds)+1.0e-9*(now.tv_nsec-nseconds);
-    uint16_t port=initUDP();
+    vector<uint16_t> ports;
+    //for(int i=0;i<threadsNo; i++){
+        ports.push_back(initUDP());
+    //}
+    for(int i=0; i<ports.size(); i++){
+        header[9+2*i]=(ports[i] >>8)&0xFF;
+        header[10+2*i]=ports[i] & 0xFF;
+    }
+   /* uint16_t port=initUDP();
     header[9]=(port >>8)&0xFF;
-    header[10]=port & 0xFF;
+    header[10]=port & 0xFF;*/
 
     if(send(clientTCP, header, 11, 0)==-1){
         perror("TCP Send");
         exit(EXIT_FAILURE);
     }
     //thread measurements(doMeasurements);
-    thread measurements(doMeasurements);
+    vector<thread> threads;
+    if(threadsNo==0)
+        threads.push_back(thread(doMeasurements));
+    else{
+        for(int i=0; i<threadsNo; i++){
+            threads.push_back(thread(doMeasurements));
+        }
+    }
+    thread print(printData);
     receivedBytes=0;
     while(receivedBytes!=9){
         receivedBytes+=recv(clientTCP, &buffer[receivedBytes], 9, 0);
     }
     clock_gettime(CLOCK_MONOTONIC, &endd);
     //keepRunning=0;
-    measurements.detach();
+    for(int i=0; i<threads.size(); i++){
+        threads[i].detach();
+    }
+    print.detach();
+    //measurements.detach();
     //measurements.join();
     memset(&header[5], 0, sizeof(header));
     header[5]='f';
@@ -281,13 +302,16 @@ flags   = SCM_TIMESTAMPING_OPT_STATS;
         printf("ERROR: setsockopt SO_TIMESTAMPING\n");
     serverUDPInfo.sin_family=AF_INET;
     serverUDPInfo.sin_addr.s_addr=listening_IP;
-    serverUDPInfo.sin_port=htons(56587);
+    serverUDPInfo.sin_port=0;
 
     if(bind(udpSocket, (const struct sockaddr *) &serverUDPInfo, sizeof(serverUDPInfo))==-1){
         perror("UDP bind");
         exit(EXIT_FAILURE);
     }
-    return ntohs(serverUDPInfo.sin_port);
+    struct sockaddr_in forPort;
+    socklen_t len = sizeof(forPort);
+    getsockname(udpSocket, (struct sockaddr *)&forPort, &len);
+    return ntohs(forPort.sin_port);
     
 }
 
@@ -295,7 +319,6 @@ void
 doMeasurements(){
 
     socklen_t len=sizeof(clientUDPInfo);
-    thread print(printData);
     uint8_t *buffer=(uint8_t*)malloc(65535*sizeof(uint8_t));
     uint32_t seconds, nseconds;
     struct timespec now, prev;
@@ -333,7 +356,6 @@ doMeasurements(){
         packetCounter++;
         packetsPerS++;
     }
-    print.join();
 }
 template<typename T> void printElement(T t, const int &width){
     if(file){
