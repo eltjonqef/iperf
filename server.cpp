@@ -29,13 +29,14 @@
 #include <atomic>
 #include <iomanip>
 #include <fstream>
+#include <vector>
 using namespace std;
 
 void initTCP();
 uint16_t initUDP();
 void doMeasurements();
 void printData();
-
+template<typename T> void printElement(T t, const int &width);
 uint16_t listening_port;
 uint32_t listening_IP=INADDR_ANY;
 
@@ -63,6 +64,10 @@ struct data{
 };
 stack <data> printStack;
 int interval=1;
+double avgThroughput=0;
+double avgJitter=0;
+struct timespec  start, endd;
+double avgOWD=0;
 int main(int argc, char **argv){
 
     header=(uint8_t*)malloc(500*sizeof(uint8_t));
@@ -184,12 +189,82 @@ void initTCP(){
     while(receivedBytes!=9){
         receivedBytes+=recv(clientTCP, &buffer[receivedBytes], 9, 0);
     }
+    clock_gettime(CLOCK_MONOTONIC, &endd);
     //keepRunning=0;
     measurements.detach();
     //measurements.join();
+    memset(&header[5], 0, sizeof(header));
+    header[5]='f';
+    header[6]='i';
+    header[7]='n';
+    
+    
+    cout<<"----------------------------------------------------"<<endl;
+    double timeee=(endd.tv_sec-start.tv_sec)+1.0e-9*(endd.tv_nsec-start.tv_nsec);
+    cout<<timeee<<endl;
+    if(!owd){
+        printElement("Throughput", 20);
+        printElement("Goodput", 20);
+        printElement("Jitter", 20);
+        printElement("Lost Packets/Total", 20);
+        cout<<endl;
+        uint s=0;
+        while(avgThroughput>=1024 && s<4){
+                s++;
+                avgThroughput/=1024;
+            }
+        printElement(to_string(avgThroughput/timeee)+" "+suffixes[s], 20);
+        printElement(to_string(avgThroughput/timeee)+" "+suffixes[s], 20);
+        printElement(to_string(avgJitter/timeee), 20);
+        printElement(to_string((totalPackets-packetCounter)/totalPackets), 20);
+        cout<<endl;
+        /*string avgT=to_string(avgThroughput)+" "+suffixes[s];
+        string avgG=to_string(avgThroughput)+" "+suffixes[s];
+        string avgJ=to_string(avgJitter);
+        string lp=to_string((totalPackets-packetCounter)/totalPackets);
+
+        header[8]=4+avgG.length()+avgT.length()+avgJ.length()+lp.length();
+
+        header[9]=',';
+        memcpy(&header[10], avgT.c_str(), avgT.length());
+        
+        header[10+avgT.length()]=',';
+        memcpy(&header[11+avgG.length()], avgG.c_str(), avgG.length());
+
+        header[11+avgT.length()+avgG.length()]=',';
+        memcpy(&header[12+avgT.length()+avgG.length()], avgJ.c_str(), avgJ.length());
+
+        header[12+avgT.length()+avgG.length()+avgJ.length()]=',';
+        memcpy(&header[13+avgT.length()+avgG.length()+avgJ.length()], lp.c_str(), lp.length());
+        
+        */
+        if(send(clientTCP, header, 8, 0)==-1){
+        perror("TCP Send");
+        exit(EXIT_FAILURE);
+    }
+    }
+    else{
+        printElement("One way delay", 20);
+        cout<<endl;
+        printElement(avgOWD/timeee, 20);
+        cout<<endl;
+    }
+
+    
+    /*header[8]=KATI;
+
+    header[9]=(avgThroughput>>24)& 0xFF;
+    header[10]=(avgThroughput>>16)& 0xFF;
+    header[11]=(avgThroughput>>8)& 0xFF;
+    header[12]=avgThroughput& 0xFF;
+
+    header[13]=(avgJitter>>24)& 0xFF;
+    header[14]=(avgJitter>>16)& 0xFF;
+    header[15]=(avgJitter>>8)& 0xFF;
+    header[16]=avgJitter& 0xFF;*/
     close(clientTCP);
     close(tcpSocket);
-}
+}   
 
 uint16_t
 initUDP(){
@@ -249,6 +324,7 @@ doMeasurements(){
         //cout<<"aa"<<jitter.load(std::memory_order_relaxed)<<endl;
         if(packetCounter==0){
             jitter=0.0;
+            start=now;
         }
         else{
             jitter+=(now.tv_sec-prev.tv_sec)+1.0e-9*(now.tv_nsec-prev.tv_nsec);
@@ -287,6 +363,8 @@ printData(){
         while(keepRunning){
             usleep(interval*1000000);
             uint s=0;
+            avgThroughput+=throughput*8;
+            avgJitter+=jitter/packetsPerS;
             double count=throughput*8;
             count/=interval;
             while(count>=1024 && s<4){
@@ -297,7 +375,7 @@ printData(){
             printElement(to_string(count)+" "+suffixes[s], 20);
             printElement(to_string(count)+" "+suffixes[s], 20);
             printElement(jitter/packetsPerS, 20);
-            printElement(to_string(totalPackets-packetCounter)+"/"+to_string(packetCounter), 20);throughput=0; jitter=0;packetsPerS=0;  
+            printElement(to_string(totalPackets-packetCounter)+"/"+to_string(totalPackets), 20);throughput=0; jitter=0;packetsPerS=0;  
             cout<<endl;
             if(file){
                 ofstream outfile;
@@ -319,7 +397,7 @@ printData(){
         while(keepRunning){
             usleep(interval*1000000);
             printElement(i, 5);i++;
-            printElement(oneWayDelay/packetsPerS, 20);oneWayDelay=0;packetsPerS=0;
+            printElement(oneWayDelay/packetsPerS, 20);avgOWD+=oneWayDelay; oneWayDelay=0;packetsPerS=0;
             cout<<endl;
             if(file){
                 ofstream outfile;

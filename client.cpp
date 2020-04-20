@@ -194,6 +194,20 @@ void initTCP(){
         perror("TCP Send");
         exit(EXIT_FAILURE);
     }
+    memset(&buffer[0], 0, sizeof(buffer));
+    receivedBytes=0;
+    while(receivedBytes!=8){
+        receivedBytes+=recv(sock, &buffer[receivedBytes], 8, 0);
+    }
+    int len=buffer[8];
+    cout<<len<<endl;
+    //receivedBytes=0;
+   /* while(receivedBytes!=len+9){
+        receivedBytes+=recv(sock, &buffer[receivedBytes], len, 0);
+    }
+    for(int i=0; i<receivedBytes; i++){
+        cout<<buffer[i];
+    }cout<<endl;*/
     close(sock);
 }
 void durationFunc(){
