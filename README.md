@@ -10,10 +10,10 @@ $ ./server [mandatory] [options]
 ```
 
 ### Mandatory:
--a       Server IP
+-a       Server IP  
 -p       Server Port
 ### Options:
--i       Print Interval
+-i       Print Interval  
 -f       Output File
 
 ## Client:
@@ -22,13 +22,13 @@ $ ./client [mandatory] [options]
 ```
 
 ### Mandatory:
--a       Server IP
--p       Server Port
--l       Experiment Packet Size
+-a       Server IP  
+-p       Server Port  
+-l       Experiment Packet Size  
 -b       Bandwidth
 
 ### Options
--n       Number of parallel streams
--t       Experiment Duration
--d       One way delay
+-n       Number of parallel streams  
+-t       Experiment Duration  
+-d       One way delay  
 -w       Wait duration
