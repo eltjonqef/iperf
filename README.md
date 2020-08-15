@@ -28,6 +28,8 @@ $ ./client [mandatory] [options]
 -b       Bandwidth
 
 ### Options
+-i       Print Interval  
+-f       Output File
 -n       Number of parallel streams  
 -t       Experiment Duration  
 -d       One way delay  
