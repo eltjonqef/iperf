@@ -1,28 +1,3 @@
-/*
-                                                        CLIENT TCP INIT PACKET
-                                        -------------------------------------------------
-                                       | iperf | init | data length | data ..............|
-                                        -------------------------------------------------
-                                BYTES:     5       4         1            data len
-
-                                                CLIENT TCP CLOSE SOCKET PACKET
-                                                     ---------------
-                                                    | iperf | close |
-                                                     ---------------
-
-                                                CLIENT TCP ACC PACKET
-                                        -----------------------------------------
-                                       | iperf | acc | data length | data .......|
-                                        -----------------------------------------
-                                BYTES:     5      3         1         data len
-
-                                                CLIENT TCP DEC PACKET
-                                                 ---------------
-                                                | iperf | close |
-                                                 ---------------
-
-*/
-
 #include <iostream>
 #include <unistd.h>
 #include <sys/types.h>
@@ -51,11 +26,6 @@ uint16_t listening_port;
 uint32_t listening_IP=INADDR_ANY;
 uint8_t *header;
 int interval=1;
-map<int, uint8_t*> headerC;
-map<uint8_t*, int> headerLenC;
-map<int, uint8_t*> headerS;
-map<uint8_t*, int> headerLenS;
-int parallelStreams;
 int sock;
 string suffixes[4];
 uint32_t counter;
@@ -64,8 +34,12 @@ atomic<int> bucket;
 int udpSocket;
 int duration;
 static volatile int keepRunning = 1;
-int main(int argc, char **argv){
-suffixes[0] = "b/s";
+size_t dataSent=0;
+
+int 
+main(int argc, char **argv){
+
+    suffixes[0] = "b/s";
     suffixes[1] = "Kb/s";
     suffixes[2] = "Mb/s";
     suffixes[3] = "Gb/s";
@@ -89,46 +63,36 @@ suffixes[0] = "b/s";
         switch (getopt(argc, argv, "a:p:i:f:cl:b:n:t:dw:"))
         {
             case 'a':
-                //IP of server interface
-                listening_IP=inet_addr(optarg);//pros to parwn vale IP to 127.0.0.1 gia na paizeis bala sto pc sou
+                listening_IP=inet_addr(optarg);
                 continue;
             case 'p':
-                //port of server interface
                 listening_port=atoi(optarg);
                 continue;
             case 'i':
-                //interval of printed info
                 interval=atoi(optarg);
                 continue;
             case 'f':
-                //output file
                 file=optarg;
                 continue;
             case 'c':
-                //client mode, dont know what we will do with this since we have seperate files
+                //client ode, dont know what we will do with this since we have seperate files
                 continue;
             case 'l':
-                //udp packet size
                 DATALIMIT=atoi(optarg);
                 continue;
             case 'b':
-                //bandwidth (NOMIZW EXEI BONUS GIAUTO)
                 BANDWIDTH=atoi(optarg);
                 continue;
             case 'n':
-                //no of parallel data streams
                 header[10]=atoi(optarg);
                 continue;
             case 't':
-                //duration
                 duration=atoi(optarg);
                 continue;
             case 'd':
-                //measure the one way delay
                 header[11]=1;
                 continue;
             case 'w':
-                //wait seconds before start
                 usleep(atoi(optarg)*1000000);
                 continue;
             default:
@@ -141,7 +105,8 @@ suffixes[0] = "b/s";
     return 0;
 }
 
-void initTCP(){
+void
+initTCP(){
 
     if((sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==-1){
         perror("opening TCP listening socket");
@@ -183,7 +148,7 @@ void initTCP(){
     }
     uint16_t port=buffer[0];
     port=(port<<8)|buffer[1];
-    cout<<"Connecting to port: "<<port<<endl;
+    cout<<"Connecting with server: "<<inet_ntoa(serverTCPInfo.sin_addr)<<" at port: "<<port<<endl;
     doMeasurements(port);
     memset(&header[5], 0, sizeof(header));
     header[5]='s';
@@ -200,30 +165,19 @@ void initTCP(){
         receivedBytes+=recv(sock, &buffer[receivedBytes], 8, 0);
     }
     int len=buffer[8];
-    cout<<len<<endl;
-    //receivedBytes=0;
-   /* while(receivedBytes!=len+9){
-        receivedBytes+=recv(sock, &buffer[receivedBytes], len, 0);
-    }
-    for(int i=0; i<receivedBytes; i++){
-        cout<<buffer[i];
-    }cout<<endl;*/
     close(sock);
 }
-void durationFunc(){
+
+void
+durationFunc(){
+
     usleep(duration*1000000);
     intHandler(1);
 }
-size_t dataSent=0;
+
 void
 doMeasurements(uint16_t port){
     
-   /* if(BANDWIDTH<=524056){
-        DATALIMIT=BANDWIDTH;
-    }
-    else {
-        DATALIMIT=500000;
-    }*/
     signal(SIGINT, intHandler);
     uint8_t *data=(uint8_t*)malloc(DATALIMIT*sizeof(sizeof(uint8_t)));
     FILE* fd = fopen("/dev/urandom", "rb");
@@ -260,15 +214,7 @@ doMeasurements(uint16_t port){
             data[10]=(now.tv_nsec >>8)& 0xFF;
             data[11]= now.tv_nsec & 0xFF;
             dataSent+=sendto(udpSocket, data, DATALIMIT/8, MSG_WAITALL, (struct sockaddr*)&serverUDPInfo,sizeof(serverUDPInfo));
-            //cout<<now.tv_sec<<" "<<now.tv_nsec<<endl;
-/*            if(now.tv_sec-prev.tv_sec>=1){ AUTO EDW BOREI NA TO VALOUME GIA NA KANOUME PIO AKRIVES TO BITRATE
-                if(sent<BANDWIDTH/8-80){
-                    sleepTime=sleepTime*0.96;
-                }
-                sent=0;
-            }
-            prev=now;
-*/           counter++;
+            counter++;
         }
     }
     bucketThread.join();
@@ -287,11 +233,13 @@ fillBucket(){
     }
 }
 
-void intHandler(int dummy) {
+void
+intHandler(int dummy) {
     keepRunning = 0;
 }
 
-template<typename T> void printElement(T t, const int &width){
+template<typename T> void
+printElement(T t, const int &width){
     if(file){
         ofstream outfile;
         outfile.open(file, ios_base::app);
@@ -303,37 +251,38 @@ template<typename T> void printElement(T t, const int &width){
 
 void
 printData(){
+
     printElement("No", 5);
-        printElement("Throughput", 20);
-        printElement("Goodput", 20);
-        printElement("Total Packets", 20);
+    printElement("Throughput", 20);
+    printElement("Goodput", 20);
+    printElement("Total Packets", 20);
+    cout<<endl;
+    if(file){
+        ofstream outfile;
+        outfile.open(file, ios_base::app);
+        outfile<<"\n";
+        outfile.close();
+    }
+    int i=1;
+    while(keepRunning){
+        usleep(interval*1000000);
+        uint s=0;
+        double count=dataSent*8;
+        count/=interval;
+        while(count>=1024 && s<4){
+            s++;
+            count/=1024;
+        }
+        printElement(i, 5);i++;
+        printElement(to_string(count)+" "+suffixes[s], 20);
+        printElement(to_string(count)+" "+suffixes[s], 20);
+        printElement(to_string(counter), 20);dataSent=0;
         cout<<endl;
         if(file){
             ofstream outfile;
             outfile.open(file, ios_base::app);
             outfile<<"\n";
             outfile.close();
-        }
-        int i=1;
-        while(keepRunning){
-            usleep(interval*1000000);
-            uint s=0;
-            double count=dataSent*8;
-            count/=interval;
-            while(count>=1024 && s<4){
-                s++;
-                count/=1024;
-            }
-            printElement(i, 5);i++;
-            printElement(to_string(count)+" "+suffixes[s], 20);
-            printElement(to_string(count)+" "+suffixes[s], 20);
-            printElement(to_string(counter), 20);dataSent=0;
-            cout<<endl;
-            if(file){
-                ofstream outfile;
-                outfile.open(file, ios_base::app);
-                outfile<<"\n";
-                outfile.close();
-            }      
-        }
+        }      
+    }
 }

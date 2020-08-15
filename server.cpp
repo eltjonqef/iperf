@@ -1,19 +1,3 @@
-/*
-                                                            TCP RECEIVE PACKET
-                                        --------------------------------------------------------------------
-                                       | iperf | message type(init/close) | data length | data ..............|
-                                        --------------------------------------------------------------------
-                                BYTES:     5                4/5                   1            data len
-
-
-                                                            TCP SEND PACKET
-
-                                        ---------------------------------------------
-                                       | iperf | acc/dec | data length | data .......|
-                                        ---------------------------------------------
-                                BYTES:     5        3           1         data len
-*/
-
 #include <iostream>
 #include <unistd.h>
 #include <sys/types.h>
@@ -46,29 +30,23 @@ uint8_t *header;
 uint32_t packetCounter=0;
 uint32_t totalPackets=0;
 int throughput;
-//atomic<double> jitter;
 double jitter;
 double oneWayDelay;
-    int packetsPerS=0;
+int packetsPerS=0;
 char *file=NULL;
 string suffixes[4];
 static volatile int keepRunning = 1;
 double syncClocks;
 int owd;
-struct data{
-    size_t goodput;
-    double jitter;
-    size_t packetcounter;
-    size_t totalPackets;
-    double OWD;
-};
-stack <data> printStack;
 int interval=1;
 double avgThroughput=0;
 double avgJitter=0;
 struct timespec  start, endd;
 double avgOWD=0;
-int main(int argc, char **argv){
+
+
+int
+main(int argc, char **argv){
 
     header=(uint8_t*)malloc(500*sizeof(uint8_t));
     header[0]='i';
@@ -86,24 +64,21 @@ int main(int argc, char **argv){
     suffixes[1] = "Kb/s";
     suffixes[2] = "Mb/s";
     suffixes[3] = "Gb/s";
+
     while (1){
-        
+
         switch (getopt(argc, argv, "a:p:i:f:s"))
         {
             case 'a':
-                //IP of server interface
-                listening_IP=inet_addr(optarg);//pros to parwn vale IP to 127.0.0.1 gia na paizeis bala sto pc sou
+                listening_IP=inet_addr(optarg);
                 continue;
             case 'p':
-                //port of server interface
                 listening_port=atoi(optarg);
                 continue;
             case 'i':
-                //interval of printed info
                 interval=atoi(optarg);
                 continue;
             case 'f':
-                //output file
                 file=optarg;
                 continue;
             case 's':
@@ -118,7 +93,8 @@ int main(int argc, char **argv){
     return 0;
 }
 
-void initTCP(){
+void
+initTCP(){
 
     if((tcpSocket=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==-1){
         perror("opening TCP listening socket");
@@ -144,9 +120,8 @@ void initTCP(){
     }
 
     cout<<"Established connection with client:\n";
-    cout<<"\tIP: "<<clientTCPInfo.sin_port<<endl;
-    cout<<"\tPort: "<<inet_ntoa(clientTCPInfo.sin_addr)<<endl;
-
+    cout<<"\tIP: "<<inet_ntoa(clientTCPInfo.sin_addr)<<endl;
+    cout<<"\tPort: "<<clientTCPInfo.sin_port<<endl;
     size_t receivedBytes=0;
 
 
@@ -160,7 +135,6 @@ void initTCP(){
     while(receivedBytes!=len){
         receivedBytes+=recv(clientTCP, &buffer[receivedBytes], len, 0);
     }
-    cout<<(int)buffer[1]<<endl;
     if(buffer[1]==1){
         owd=1;
     }
@@ -177,22 +151,16 @@ void initTCP(){
     nseconds=(nseconds<<8)|buffer[9];
     syncClocks=(now.tv_sec-seconds)+1.0e-9*(now.tv_nsec-nseconds);
     vector<uint16_t> ports;
-    //for(int i=0;i<threadsNo; i++){
-        ports.push_back(initUDP());
-    //}
+    ports.push_back(initUDP());
     for(int i=0; i<ports.size(); i++){
         header[9+2*i]=(ports[i] >>8)&0xFF;
         header[10+2*i]=ports[i] & 0xFF;
     }
-   /* uint16_t port=initUDP();
-    header[9]=(port >>8)&0xFF;
-    header[10]=port & 0xFF;*/
 
     if(send(clientTCP, header, 11, 0)==-1){
         perror("TCP Send");
         exit(EXIT_FAILURE);
     }
-    //thread measurements(doMeasurements);
     vector<thread> threads;
     if(threadsNo==0)
         threads.push_back(thread(doMeasurements));
@@ -207,13 +175,10 @@ void initTCP(){
         receivedBytes+=recv(clientTCP, &buffer[receivedBytes], 9, 0);
     }
     clock_gettime(CLOCK_MONOTONIC, &endd);
-    //keepRunning=0;
     for(int i=0; i<threads.size(); i++){
         threads[i].detach();
     }
     print.detach();
-    //measurements.detach();
-    //measurements.join();
     memset(&header[5], 0, sizeof(header));
     header[5]='f';
     header[6]='i';
@@ -222,7 +187,7 @@ void initTCP(){
     
     cout<<"----------------------------------------------------"<<endl;
     double timeee=(endd.tv_sec-start.tv_sec)+1.0e-9*(endd.tv_nsec-start.tv_nsec);
-    cout<<timeee<<endl;
+
     if(!owd){
         printElement("Throughput", 20);
         printElement("Goodput", 20);
@@ -239,26 +204,6 @@ void initTCP(){
         printElement(to_string(avgJitter/timeee), 20);
         printElement(to_string((totalPackets-packetCounter)/totalPackets), 20);
         cout<<endl;
-        /*string avgT=to_string(avgThroughput)+" "+suffixes[s];
-        string avgG=to_string(avgThroughput)+" "+suffixes[s];
-        string avgJ=to_string(avgJitter);
-        string lp=to_string((totalPackets-packetCounter)/totalPackets);
-
-        header[8]=4+avgG.length()+avgT.length()+avgJ.length()+lp.length();
-
-        header[9]=',';
-        memcpy(&header[10], avgT.c_str(), avgT.length());
-        
-        header[10+avgT.length()]=',';
-        memcpy(&header[11+avgG.length()], avgG.c_str(), avgG.length());
-
-        header[11+avgT.length()+avgG.length()]=',';
-        memcpy(&header[12+avgT.length()+avgG.length()], avgJ.c_str(), avgJ.length());
-
-        header[12+avgT.length()+avgG.length()+avgJ.length()]=',';
-        memcpy(&header[13+avgT.length()+avgG.length()+avgJ.length()], lp.c_str(), lp.length());
-        
-        */
         if(send(clientTCP, header, 8, 0)==-1){
         perror("TCP Send");
         exit(EXIT_FAILURE);
@@ -270,19 +215,6 @@ void initTCP(){
         printElement(avgOWD/timeee, 20);
         cout<<endl;
     }
-
-    
-    /*header[8]=KATI;
-
-    header[9]=(avgThroughput>>24)& 0xFF;
-    header[10]=(avgThroughput>>16)& 0xFF;
-    header[11]=(avgThroughput>>8)& 0xFF;
-    header[12]=avgThroughput& 0xFF;
-
-    header[13]=(avgJitter>>24)& 0xFF;
-    header[14]=(avgJitter>>16)& 0xFF;
-    header[15]=(avgJitter>>8)& 0xFF;
-    header[16]=avgJitter& 0xFF;*/
     close(clientTCP);
     close(tcpSocket);
 }   
@@ -297,7 +229,7 @@ initUDP(){
     memset(&serverUDPInfo, 0, sizeof(serverUDPInfo));
     memset(&clientUDPInfo, 0, sizeof(clientUDPInfo));
     int flags;
-flags   = SCM_TIMESTAMPING_OPT_STATS;
+    flags= SCM_TIMESTAMPING_OPT_STATS;
     if (setsockopt(udpSocket, SOL_SOCKET, SO_TIMESTAMPING, &flags, sizeof(flags)) < 0)
         printf("ERROR: setsockopt SO_TIMESTAMPING\n");
     serverUDPInfo.sin_family=AF_INET;
@@ -312,7 +244,6 @@ flags   = SCM_TIMESTAMPING_OPT_STATS;
     socklen_t len = sizeof(forPort);
     getsockname(udpSocket, (struct sockaddr *)&forPort, &len);
     return ntohs(forPort.sin_port);
-    
 }
 
 void
@@ -325,7 +256,6 @@ doMeasurements(){
     prev.tv_sec=0;
     prev.tv_nsec=0;
     while(keepRunning){
-        //throughput.fetch_add(recvfrom(udpSocket, buffer, 65535, MSG_WAITALL, (struct sockaddr*)&clientUDPInfo, &len),std::memory_order_relaxed);
         throughput+=recvfrom(udpSocket, buffer, 65535, MSG_WAITALL, (struct sockaddr*)&clientUDPInfo, &len);
         clock_gettime(CLOCK_MONOTONIC, &now);
         totalPackets=buffer[0];
@@ -340,11 +270,7 @@ doMeasurements(){
         nseconds=(nseconds<<8)|buffer[9];
         nseconds=(nseconds<<8)|buffer[10];
         nseconds=(nseconds<<8)|buffer[11];
-        /*cout<<seconds<<" "<<nseconds<<endl;
-        cout<<now.tv_sec<<" "<<now.tv_nsec<<endl;*/
-        oneWayDelay+=abs(((now.tv_sec-seconds)+1.0e-9*(now.tv_nsec-nseconds))-syncClocks);/*
-        cout<<"jitter"<<(now.tv_sec-prev.tv_sec)+1.0e-9*(now.tv_nsec-prev.tv_nsec)<<endl;*/
-        //cout<<"aa"<<jitter.load(std::memory_order_relaxed)<<endl;
+        oneWayDelay+=abs(((now.tv_sec-seconds)+1.0e-9*(now.tv_nsec-nseconds))-syncClocks);
         if(packetCounter==0){
             jitter=0.0;
             start=now;
@@ -357,7 +283,10 @@ doMeasurements(){
         packetsPerS++;
     }
 }
-template<typename T> void printElement(T t, const int &width){
+
+template<typename T> void
+printElement(T t, const int &width){
+
     if(file){
         ofstream outfile;
         outfile.open(file, ios_base::app);
@@ -368,6 +297,7 @@ template<typename T> void printElement(T t, const int &width){
 }
 void
 printData(){
+
     printElement("No", 5);
     if(!owd){
         printElement("Throughput", 20);
